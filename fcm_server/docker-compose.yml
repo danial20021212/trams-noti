@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trams_noti_db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: trams_noti_db
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+
+    ports:
+      - 5004:5432
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
