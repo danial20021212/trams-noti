@@ -1,0 +1,5 @@
+DELETE FROM device_tokens WHERE username = 'user.level1';
+DELETE FROM notifications;
+
+
+flutter build apk --debug

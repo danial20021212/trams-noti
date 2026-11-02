@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "276185312340",
+    "project_id": "trams-test-f2a06",
+    "storage_bucket": "trams-test-f2a06.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:276185312340:android:c87c97cdca97f9450891c1",
+        "android_client_info": {
+          "package_name": "com.ai.trams"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUBqX1EPYfcGBISJzHaPBLhjm-IYCRgqs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
