@@ -26,10 +26,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for macos - '
@@ -58,5 +55,13 @@ class DefaultFirebaseOptions {
     messagingSenderId: '276185312340',
     projectId: 'trams-test-f2a06',
     storageBucket: 'trams-test-f2a06.firebasestorage.app',
+  );
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyD_W2OoFusUd8vOUPCo8pvSWEUM-wEYwl8',
+    appId: '1:276185312340:ios:eb9d8d8e71b2cd600891c1',
+    messagingSenderId: '276185312340',
+    projectId: 'trams-test-f2a06',
+    storageBucket: 'trams-test-f2a06.firebasestorage.app',
+    iosBundleId: 'com.ai.trams',
   );
 }

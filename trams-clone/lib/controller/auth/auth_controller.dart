@@ -43,6 +43,7 @@ class AuthController extends GetxController {
       } catch (e) {
         debugPrint('FCM subscribe failed: $e');
       }
+      await FirebaseMessaging.instance.requestPermission();
       await PushService.registerDevice(
         data.userProfileData!.mUsername,
         userType: data.userProfileData!.mUserType,

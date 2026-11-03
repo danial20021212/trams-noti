@@ -15,18 +15,34 @@ class PushService {
   static Map<String, String> _authHeaders(String username) =>
       {'X-Test-User': username};
 
+
+  /// On iOS the FCM token only works once Apple's token is ready.
+  static Future<String?> _getFcmToken() async {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      String? apns;
+      for (var i = 0; i < 10 && apns == null; i++) {
+        apns = await FirebaseMessaging.instance.getAPNSToken();
+        if (apns == null) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+      if (apns == null) return null;
+    }
+    return FirebaseMessaging.instance.getToken();
+  }
+
   /// Link this phone's FCM token to the logged-in user.
   static Future<void> registerDevice(String username,
     {String? userType, String? userPackage}) async {
     if (kIsWeb) return;
     try {
-      final token = await FirebaseMessaging.instance.getToken();
+      final token = await _getFcmToken();
       if (token == null) return;
       await _dio.post(
         '/devices',
         data: {
           'token': token,
-          'platform': 'android',
+          'platform': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
           'userType': userType,
           'userPackage': userPackage,
         },
@@ -42,7 +58,7 @@ class PushService {
   static Future<void> unregisterDevice(String username) async {
     if (kIsWeb) return;
     try {
-      final token = await FirebaseMessaging.instance.getToken();
+      final token = await _getFcmToken();
       if (token == null) return;
       await _dio.delete(
         '/devices',

@@ -148,6 +148,7 @@ app.post('/notifications', requireUser, async (req, res) => {
         tokens,
         notification: { title, body },
         android: { priority: 'high' },
+        apns: { payload: { aps: { sound: 'default' } } },
         data: { notificationId: String(notificationId) },
       });
       sent = result.successCount;
@@ -220,6 +221,7 @@ app.post('/notifications/by-type', requireUser, async (req, res) => {
         tokens,
         notification: { title, body },
         android: { priority: 'high' },
+        apns: { payload: { aps: { sound: 'default' } } },
       });
       sent = result.successCount;
 
