@@ -185,9 +185,97 @@ app.post('/notifications', requireUser, async (req, res) => {
 });
 
 
-// POST /notifications/by-type   body: { "toUserType": "Consultant", "title": "...", "body": "..." }
-// Sends to every phone whose logged-in user has this user type.
-app.post('/notifications/by-type', requireUser, async (req, res) => {
+// GET /notifications
+// Lists the logged-in user's notifications, newest first (max 200).
+// Each row has formType: "B" | "C" | "G" | "R" (null for old rows).
+app.get('/notifications', requireUser, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, from_username, title, body, form_type, is_read, created_at
+       FROM notifications
+       WHERE to_username = $1
+       ORDER BY created_at DESC
+       LIMIT 200`,
+      [req.user.username]
+    );
+    res.json({
+      ok: true,
+      notifications: r.rows.map((n) => ({
+        id: n.id,
+        fromUsername: n.from_username,
+        title: n.title,
+        body: n.body,
+        formType: n.form_type,
+        isRead: n.is_read,
+        createdAt: n.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('List notifications failed:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Shared helper for the Form B notifications below.
+// Finds every phone logged in as `userType` in `userPackage`, saves one
+// notification row per recipient user, sends the push, and deletes dead tokens.
+// ---------------------------------------------------------------------------
+async function notifyUsers({ fromUsername, userType, userPackage, title, body, formType = null }) {
+  // 1. Find every phone logged in as this user type AND package.
+  const devices = await pool.query(
+    'SELECT username, fcm_token FROM device_tokens WHERE user_type = $1 AND user_package = $2',
+    [userType, String(userPackage)]
+  );
+  const tokens = devices.rows.map((r) => r.fcm_token);
+  const usernames = [...new Set(devices.rows.map((r) => r.username))];
+
+  // 2. Save one notification per recipient user.
+  for (const u of usernames) {
+    await pool.query(
+      `INSERT INTO notifications (to_username, from_username, title, body, form_type)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [u, fromUsername, title, body, formType]
+    );
+  }
+
+  // 3. Send to all of the phones.
+  let sent = 0;
+  let removed = 0;
+  if (tokens.length > 0) {
+    const result = await getMessaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      android: { priority: 'high' },
+      apns: { payload: { aps: { sound: 'default' } } },
+    });
+    sent = result.successCount;
+
+    // 4. Clean up dead tokens.
+    const dead = [];
+    result.responses.forEach((r, i) => {
+      const code = r.error?.code;
+      if (
+        !r.success &&
+        (code === 'messaging/registration-token-not-registered' ||
+          code === 'messaging/invalid-registration-token')
+      ) {
+        dead.push(tokens[i]);
+      }
+    });
+    if (dead.length > 0) {
+      await pool.query('DELETE FROM device_tokens WHERE fcm_token = ANY($1)', [dead]);
+      removed = dead.length;
+    }
+  }
+
+  return { users: usernames.length, devices: tokens.length, sent, removed };
+}
+
+// POST /notifications/formB/submit
+// body: { "toUserType": "Consultant", "toUserPackage": "3", "title": "...", "body": "..." }
+// Sends to every phone whose logged-in user has this user type AND package.
+app.post('/notifications/formB/submit', requireUser, async (req, res) => {
   const { toUserType, toUserPackage, title, body = '' } = req.body || {};
   if (!toUserType || !toUserPackage || !title) {
     return res
@@ -196,59 +284,68 @@ app.post('/notifications/by-type', requireUser, async (req, res) => {
   }
 
   try {
-    // 1. Find every phone logged in as this user type.
-    const devices = await pool.query(
-      'SELECT username, fcm_token FROM device_tokens WHERE user_type = $1 AND user_package = $2',
-      [toUserType, String(toUserPackage)]
-    );
-    const tokens = devices.rows.map((r) => r.fcm_token);
-    const usernames = [...new Set(devices.rows.map((r) => r.username))];
-
-    // 2. Save one notification per recipient user.
-    for (const u of usernames) {
-      await pool.query(
-        `INSERT INTO notifications (to_username, from_username, title, body)
-         VALUES ($1, $2, $3, $4)`,
-        [u, req.user.username, title, body]
-      );
-    }
-
-    // 3. Send to all of the phones.
-    let sent = 0;
-    let removed = 0;
-    if (tokens.length > 0) {
-      const result = await getMessaging().sendEachForMulticast({
-        tokens,
-        notification: { title, body },
-        android: { priority: 'high' },
-        apns: { payload: { aps: { sound: 'default' } } },
-      });
-      sent = result.successCount;
-
-      // 4. Clean up dead tokens.
-      const dead = [];
-      result.responses.forEach((r, i) => {
-        const code = r.error?.code;
-        if (
-          !r.success &&
-          (code === 'messaging/registration-token-not-registered' ||
-            code === 'messaging/invalid-registration-token')
-        ) {
-          dead.push(tokens[i]);
-        }
-      });
-      if (dead.length > 0) {
-        await pool.query('DELETE FROM device_tokens WHERE fcm_token = ANY($1)', [dead]);
-        removed = dead.length;
-      }
-    }
-
+    const r = await notifyUsers({
+      fromUsername: req.user.username,
+      userType: toUserType,
+      userPackage: toUserPackage,
+      title,
+      body,
+      formType: 'B',
+    });
     console.log(
-      `Notification by type "${toUserType}" pkg ${toUserPackage}: ${req.user.username} -> ${usernames.length} user(s) (devices ${tokens.length}, sent ${sent}, removed ${removed})`
+      `Form B submit "${toUserType}" pkg ${toUserPackage}: ${req.user.username} -> ${r.users} user(s) (devices ${r.devices}, sent ${r.sent}, removed ${r.removed})`
     );
-    res.json({ ok: true, users: usernames.length, devices: tokens.length, sent, removed });
+    res.json({ ok: true, ...r });
   } catch (err) {
-    console.error('Notify by type failed:', err.message);
+    console.error('Form B submit failed:', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /notifications/formB/approve
+// body: { "fromUserType": "Consultant", "fromUserPackage": "3", "title": "...", "body": "..." }
+// Only a Consultant may approve. The push goes to every "Service Provider" in the
+// SAME package as the approver. The recipient type and package are never taken
+// from the request, so an approval from package 3 can never reach package 4.
+// title and body are optional.
+//
+// TEST STAND-IN: fromUserType / fromUserPackage come from the body because
+// auth.js is a stand-in. In production, read them from the verified access
+// token's user profile (m_userType, m_userPackage) and drop them from the body.
+app.post('/notifications/formB/approve', requireUser, async (req, res) => {
+  const {
+    fromUserType,
+    fromUserPackage,
+    title = 'Form B approved',
+    body = '',
+  } = req.body || {};
+
+  if (!fromUserType || !fromUserPackage) {
+    return res
+      .status(400)
+      .json({ ok: false, error: 'fromUserType and fromUserPackage required' });
+  }
+  if (fromUserType !== 'Consultant') {
+    return res
+      .status(403)
+      .json({ ok: false, error: 'only a Consultant can approve a Form B' });
+  }
+
+  try {
+    const r = await notifyUsers({
+      fromUsername: req.user.username,
+      userType: 'Service Provider',
+      userPackage: fromUserPackage,
+      title,
+      body,
+      formType: 'B',
+    });
+    console.log(
+      `Form B approve pkg ${fromUserPackage}: ${req.user.username} -> ${r.users} Service Provider(s) (devices ${r.devices}, sent ${r.sent}, removed ${r.removed})`
+    );
+    res.json({ ok: true, ...r });
+  } catch (err) {
+    console.error('Form B approve failed:', err.message);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

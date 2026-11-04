@@ -3,6 +3,38 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:tram/constant/fcm_config.dart';
 
+/// One row of the notifications list.
+/// formType is "B", "C", "G" or "R" (null for notifications saved before tabs existed).
+class AppNotification {
+  final int id;
+  final String fromUsername;
+  final String title;
+  final String body;
+  final String? formType;
+  final bool isRead;
+  final DateTime createdAt;
+
+  AppNotification({
+    required this.id,
+    required this.fromUsername,
+    required this.title,
+    required this.body,
+    required this.formType,
+    required this.isRead,
+    required this.createdAt,
+  });
+
+  factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
+        id: j['id'] as int,
+        fromUsername: (j['fromUsername'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
+        body: (j['body'] ?? '') as String,
+        formType: j['formType'] as String?,
+        isRead: (j['isRead'] ?? false) as bool,
+        createdAt: DateTime.parse(j['createdAt'] as String).toLocal(),
+      );
+}
+
 class PushService {
   static final Dio _dio = Dio(BaseOptions(
     baseUrl: fcmServerUrl,
@@ -108,7 +140,7 @@ class PushService {
   }) async {
     try {
       final r = await _dio.post(
-        '/notifications/by-type',
+        '/notifications/formB/submit',
         data: {
           'toUserType': toUserType,
           'toUserPackage': toUserPackage,
@@ -124,6 +156,25 @@ class PushService {
     } on DioException catch (e) {
       final serverError = e.response?.data is Map ? e.response?.data['error'] : null;
       return 'Failed: ${serverError ?? e.message}';
+    }
+  }
+
+
+  /// Load this user's notifications, newest first.
+  /// Throws an Exception with a short message if the server cannot be reached.
+  static Future<List<AppNotification>> fetchNotifications(String username) async {
+    try {
+      final r = await _dio.get(
+        '/notifications',
+        options: Options(headers: _authHeaders(username)),
+      );
+      final list = (r.data['notifications'] as List?) ?? const [];
+      return list
+          .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      final serverError = e.response?.data is Map ? e.response?.data['error'] : null;
+      throw Exception(serverError ?? e.message ?? 'Cannot reach server');
     }
   }
 
