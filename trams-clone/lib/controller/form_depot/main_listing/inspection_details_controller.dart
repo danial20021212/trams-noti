@@ -65,6 +65,14 @@ class InspectionDetailsController extends GetxController {
       mainListingDetails.value = detailsResponse;
       mainListingDetails.refresh();
 
+      // Opened without a status (e.g. from a notification): take it from the
+      // record itself. Form B2 uses it to decide if the form is read-only.
+      if (status.value.isEmpty && formType.toLowerCase() == 'b') {
+        try {
+          status.value = detailsResponse.data.first.status?.toString() ?? '';
+        } catch (_) {}
+      }
+
       await loadTitle();
 
       state.value = LoaderState.loaded;

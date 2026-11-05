@@ -11,6 +11,8 @@ class AppNotification {
   final String title;
   final String body;
   final String? formType;
+  final String? recordId; // record to open when tapped, e.g. Form B recID "274"
+  final Map<String, String> meta; // bridgeName, roadName, inspectionDate...
   final bool isRead;
   final DateTime createdAt;
 
@@ -20,6 +22,8 @@ class AppNotification {
     required this.title,
     required this.body,
     required this.formType,
+    required this.recordId,
+    required this.meta,
     required this.isRead,
     required this.createdAt,
   });
@@ -30,6 +34,9 @@ class AppNotification {
         title: (j['title'] ?? '') as String,
         body: (j['body'] ?? '') as String,
         formType: j['formType'] as String?,
+        recordId: j['recordId'] as String?,
+        meta: ((j['meta'] as Map?) ?? const {})
+            .map((k, v) => MapEntry(k.toString(), v.toString())),
         isRead: (j['isRead'] ?? false) as bool,
         createdAt: DateTime.parse(j['createdAt'] as String).toLocal(),
       );

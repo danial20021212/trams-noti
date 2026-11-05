@@ -177,7 +177,63 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
+  /// Open the record this notification is about.
+  void _open(AppNotification n) {
+    final id = n.recordId;
+    if (id == null || id.isEmpty) return; // older notifications have no record
+    if (n.formType == 'B') {
+      // Same arguments the "View" button on the inspection records page passes.
+      // status is left out on purpose: the details page reads it from the record.
+      Get.toNamed('/inspection_details', arguments: {
+        'recID': id,
+        'insRecID': id,
+        'formType': 'B',
+      });
+    }
+  }
+
   Widget _tile(AppNotification n) {
+    final canOpen = n.recordId != null && n.recordId!.isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: canOpen ? () => _open(n) : null,
+      child: _tileCard(n, canOpen),
+    );
+  }
+
+  /// The labelled lines under the title, in a fixed order.
+  Widget _details(AppNotification n) {
+    const labels = {
+      'bridgeName': 'Bridge',
+      'roadName': 'Road',
+      'inspectionDate': 'Inspection date',
+    };
+    final rows = <Widget>[];
+    for (final e in labels.entries) {
+      final v = n.meta[e.key];
+      if (v == null || v.isEmpty) continue;
+      rows.add(Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 110,
+              child: Text(e.value,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            ),
+            Expanded(
+              child: Text(v,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            ),
+          ],
+        ),
+      ));
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
+  }
+
+  Widget _tileCard(AppNotification n, bool canOpen) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -210,7 +266,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
                     fontSize: 14,
                   ),
                 ),
-                if (n.body.isNotEmpty) ...[
+                if (n.meta.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  _details(n),
+                ] else if (n.body.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(n.body, style: const TextStyle(fontSize: 13)),
                 ],
@@ -222,6 +281,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
               ],
             ),
           ),
+          if (canOpen)
+            const Padding(
+              padding: EdgeInsets.only(left: 8, top: 4),
+              child: Icon(Icons.chevron_right, color: Colors.black38),
+            ),
         ],
       ),
     );

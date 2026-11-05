@@ -191,7 +191,7 @@ app.post('/notifications', requireUser, async (req, res) => {
 app.get('/notifications', requireUser, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, from_username, title, body, form_type, is_read, created_at
+      `SELECT id, from_username, title, body, form_type, record_id, meta, is_read, created_at
        FROM notifications
        WHERE to_username = $1
        ORDER BY created_at DESC
@@ -206,6 +206,8 @@ app.get('/notifications', requireUser, async (req, res) => {
         title: n.title,
         body: n.body,
         formType: n.form_type,
+        recordId: n.record_id,
+        meta: n.meta || {},
         isRead: n.is_read,
         createdAt: n.created_at,
       })),
@@ -216,12 +218,29 @@ app.get('/notifications', requireUser, async (req, res) => {
   }
 });
 
+// Optional "which record + what to show" fields from a request body:
+//   recId           the record to open when the notification is tapped (e.g. "274")
+//   bridgeName, roadName, inspectionDate   shown on the notification card
+function recordTarget(b) {
+  const meta = {};
+  for (const k of ['bridgeName', 'roadName', 'inspectionDate']) {
+    if (b[k]) meta[k] = String(b[k]);
+  }
+  return {
+    recordId: b.recId ? String(b.recId) : null,
+    meta: Object.keys(meta).length > 0 ? meta : null,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared helper for the Form B notifications below.
 // Finds every phone logged in as `userType` in `userPackage`, saves one
 // notification row per recipient user, sends the push, and deletes dead tokens.
 // ---------------------------------------------------------------------------
-async function notifyUsers({ fromUsername, userType, userPackage, title, body, formType = null }) {
+async function notifyUsers({
+  fromUsername, userType, userPackage, title, body,
+  formType = null, recordId = null, meta = null,
+}) {
   // 1. Find every phone logged in as this user type AND package.
   const devices = await pool.query(
     'SELECT username, fcm_token FROM device_tokens WHERE user_type = $1 AND user_package = $2',
@@ -233,9 +252,10 @@ async function notifyUsers({ fromUsername, userType, userPackage, title, body, f
   // 2. Save one notification per recipient user.
   for (const u of usernames) {
     await pool.query(
-      `INSERT INTO notifications (to_username, from_username, title, body, form_type)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [u, fromUsername, title, body, formType]
+      `INSERT INTO notifications
+         (to_username, from_username, title, body, form_type, record_id, meta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [u, fromUsername, title, body, formType, recordId, meta ? JSON.stringify(meta) : null]
     );
   }
 
@@ -273,7 +293,8 @@ async function notifyUsers({ fromUsername, userType, userPackage, title, body, f
 }
 
 // POST /notifications/formB/submit
-// body: { "toUserType": "Consultant", "toUserPackage": "3", "title": "...", "body": "..." }
+// body: { "toUserType": "Consultant", "toUserPackage": "3", "title": "...", "body": "...",
+//         "recId": "274", "bridgeName": "...", "roadName": "...", "inspectionDate": "..." }  (last four optional)
 // Sends to every phone whose logged-in user has this user type AND package.
 app.post('/notifications/formB/submit', requireUser, async (req, res) => {
   const { toUserType, toUserPackage, title, body = '' } = req.body || {};
@@ -291,6 +312,7 @@ app.post('/notifications/formB/submit', requireUser, async (req, res) => {
       title,
       body,
       formType: 'B',
+      ...recordTarget(req.body || {}),
     });
     console.log(
       `Form B submit "${toUserType}" pkg ${toUserPackage}: ${req.user.username} -> ${r.users} user(s) (devices ${r.devices}, sent ${r.sent}, removed ${r.removed})`
@@ -303,7 +325,8 @@ app.post('/notifications/formB/submit', requireUser, async (req, res) => {
 });
 
 // POST /notifications/formB/approve
-// body: { "fromUserType": "Consultant", "fromUserPackage": "3", "title": "...", "body": "..." }
+// body: { "fromUserType": "Consultant", "fromUserPackage": "3", "title": "...", "body": "...",
+//         "recId": "274", "bridgeName": "...", "roadName": "...", "inspectionDate": "..." }  (last four optional)
 // Only a Consultant may approve. The push goes to every "Service Provider" in the
 // SAME package as the approver. The recipient type and package are never taken
 // from the request, so an approval from package 3 can never reach package 4.
@@ -339,6 +362,7 @@ app.post('/notifications/formB/approve', requireUser, async (req, res) => {
       title,
       body,
       formType: 'B',
+      ...recordTarget(req.body || {}),
     });
     console.log(
       `Form B approve pkg ${fromUserPackage}: ${req.user.username} -> ${r.users} Service Provider(s) (devices ${r.devices}, sent ${r.sent}, removed ${r.removed})`
