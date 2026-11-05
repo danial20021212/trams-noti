@@ -233,6 +233,40 @@ class _NotificationScreenState extends State<NotificationScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
   }
 
+  /// Small coloured label: Submitted (blue), Approved (green), Rejected (red).
+  Widget _actionChip(String? action) {
+    final Color color;
+    final String label;
+    switch (action) {
+      case 'approved':
+        color = Colors.green.shade700;
+        label = 'Approved';
+        break;
+      case 'rejected':
+        color = Colors.red.shade700;
+        label = 'Rejected';
+        break;
+      case 'submitted':
+        color = Colors.blue.shade700;
+        label = 'Submitted';
+        break;
+      default:
+        return const SizedBox.shrink(); // old notifications have no action
+    }
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
   Widget _tileCard(AppNotification n, bool canOpen) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -259,12 +293,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  n.title,
-                  style: TextStyle(
-                    fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700,
-                    fontSize: 14,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        n.title,
+                        style: TextStyle(
+                          fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    _actionChip(n.action),
+                  ],
                 ),
                 if (n.meta.isNotEmpty) ...[
                   const SizedBox(height: 6),

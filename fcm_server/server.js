@@ -187,11 +187,12 @@ app.post('/notifications', requireUser, async (req, res) => {
 
 // GET /notifications
 // Lists the logged-in user's notifications, newest first (max 200).
-// Each row has formType: "B" | "C" | "G" | "R" (null for old rows).
+// Each row has formType: "B" | "C" | "G" | "R" and action: "submitted" | "approved" | "rejected"
+// (both null for old rows).
 app.get('/notifications', requireUser, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, from_username, title, body, form_type, record_id, meta, is_read, created_at
+      `SELECT id, from_username, title, body, form_type, action, record_id, meta, is_read, created_at
        FROM notifications
        WHERE to_username = $1
        ORDER BY created_at DESC
@@ -206,6 +207,7 @@ app.get('/notifications', requireUser, async (req, res) => {
         title: n.title,
         body: n.body,
         formType: n.form_type,
+        action: n.action,
         recordId: n.record_id,
         meta: n.meta || {},
         isRead: n.is_read,
@@ -239,7 +241,7 @@ function recordTarget(b) {
 // ---------------------------------------------------------------------------
 async function notifyUsers({
   fromUsername, userType, userPackage, title, body,
-  formType = null, recordId = null, meta = null,
+  formType = null, action = null, recordId = null, meta = null,
 }) {
   // 1. Find every phone logged in as this user type AND package.
   const devices = await pool.query(
@@ -253,9 +255,9 @@ async function notifyUsers({
   for (const u of usernames) {
     await pool.query(
       `INSERT INTO notifications
-         (to_username, from_username, title, body, form_type, record_id, meta)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [u, fromUsername, title, body, formType, recordId, meta ? JSON.stringify(meta) : null]
+         (to_username, from_username, title, body, form_type, action, record_id, meta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [u, fromUsername, title, body, formType, action, recordId, meta ? JSON.stringify(meta) : null]
     );
   }
 
@@ -312,6 +314,7 @@ app.post('/notifications/formB/submit', requireUser, async (req, res) => {
       title,
       body,
       formType: 'B',
+      action: 'submitted',
       ...recordTarget(req.body || {}),
     });
     console.log(
@@ -324,55 +327,61 @@ app.post('/notifications/formB/submit', requireUser, async (req, res) => {
   }
 });
 
-// POST /notifications/formB/approve
+// POST /notifications/formB/approve   and   POST /notifications/formB/reject
 // body: { "fromUserType": "Consultant", "fromUserPackage": "3", "title": "...", "body": "...",
-//         "recId": "274", "bridgeName": "...", "roadName": "...", "inspectionDate": "..." }  (last four optional)
-// Only a Consultant may approve. The push goes to every "Service Provider" in the
-// SAME package as the approver. The recipient type and package are never taken
-// from the request, so an approval from package 3 can never reach package 4.
-// title and body are optional.
+//         "recId": "274", "bridgeName": "...", "roadName": "...", "inspectionDate": "..." }
+//       (title, body and the last four are optional)
+// Only a Consultant may approve or reject. The push goes to every "Service Provider"
+// in the SAME package as the sender. The recipient type and package are never taken
+// from the request, so a decision from package 3 can never reach package 4.
 //
 // TEST STAND-IN: fromUserType / fromUserPackage come from the body because
 // auth.js is a stand-in. In production, read them from the verified access
 // token's user profile (m_userType, m_userPackage) and drop them from the body.
-app.post('/notifications/formB/approve', requireUser, async (req, res) => {
-  const {
-    fromUserType,
-    fromUserPackage,
-    title = 'Form B approved',
-    body = '',
-  } = req.body || {};
+function consultantDecision(action, defaultTitle) {
+  return async (req, res) => {
+    const {
+      fromUserType,
+      fromUserPackage,
+      title = defaultTitle,
+      body = '',
+    } = req.body || {};
 
-  if (!fromUserType || !fromUserPackage) {
-    return res
-      .status(400)
-      .json({ ok: false, error: 'fromUserType and fromUserPackage required' });
-  }
-  if (fromUserType !== 'Consultant') {
-    return res
-      .status(403)
-      .json({ ok: false, error: 'only a Consultant can approve a Form B' });
-  }
+    if (!fromUserType || !fromUserPackage) {
+      return res
+        .status(400)
+        .json({ ok: false, error: 'fromUserType and fromUserPackage required' });
+    }
+    if (fromUserType !== 'Consultant') {
+      return res
+        .status(403)
+        .json({ ok: false, error: `only a Consultant can ${action} a Form B` });
+    }
 
-  try {
-    const r = await notifyUsers({
-      fromUsername: req.user.username,
-      userType: 'Service Provider',
-      userPackage: fromUserPackage,
-      title,
-      body,
-      formType: 'B',
-      ...recordTarget(req.body || {}),
-    });
-    console.log(
-      `Form B approve pkg ${fromUserPackage}: ${req.user.username} -> ${r.users} Service Provider(s) (devices ${r.devices}, sent ${r.sent}, removed ${r.removed})`
-    );
-    res.json({ ok: true, ...r });
-  } catch (err) {
-    console.error('Form B approve failed:', err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
+    try {
+      const r = await notifyUsers({
+        fromUsername: req.user.username,
+        userType: 'Service Provider',
+        userPackage: fromUserPackage,
+        title,
+        body,
+        formType: 'B',
+        action: action === 'approve' ? 'approved' : 'rejected',
+        ...recordTarget(req.body || {}),
+      });
+      console.log(
+        `Form B ${action} pkg ${fromUserPackage}: ${req.user.username} -> ${r.users} Service Provider(s) (devices ${r.devices}, sent ${r.sent}, removed ${r.removed})`
+      );
+      res.json({ ok: true, ...r });
+    } catch (err) {
+      console.error(`Form B ${action} failed:`, err.message);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  };
+}
+
+app.post('/notifications/formB/approve', requireUser, consultantDecision('approve', 'Form B approved'));
+app.post('/notifications/formB/reject', requireUser, consultantDecision('reject', 'Form B rejected'));
 
 
 const PORT = 4000;

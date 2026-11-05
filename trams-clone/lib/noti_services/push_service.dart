@@ -11,6 +11,7 @@ class AppNotification {
   final String title;
   final String body;
   final String? formType;
+  final String? action; // "submitted", "approved" or "rejected" (null for old rows)
   final String? recordId; // record to open when tapped, e.g. Form B recID "274"
   final Map<String, String> meta; // bridgeName, roadName, inspectionDate...
   final bool isRead;
@@ -22,6 +23,7 @@ class AppNotification {
     required this.title,
     required this.body,
     required this.formType,
+    required this.action,
     required this.recordId,
     required this.meta,
     required this.isRead,
@@ -34,6 +36,7 @@ class AppNotification {
         title: (j['title'] ?? '') as String,
         body: (j['body'] ?? '') as String,
         formType: j['formType'] as String?,
+        action: j['action'] as String?,
         recordId: j['recordId'] as String?,
         meta: ((j['meta'] as Map?) ?? const {})
             .map((k, v) => MapEntry(k.toString(), v.toString())),
