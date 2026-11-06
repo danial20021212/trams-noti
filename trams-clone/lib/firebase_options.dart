@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -28,15 +25,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -58,10 +49,36 @@ class DefaultFirebaseOptions {
   );
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyD_W2OoFusUd8vOUPCo8pvSWEUM-wEYwl8',
-    appId: '1:276185312340:ios:eb9d8d8e71b2cd600891c1',
+    appId: '1:276185312340:ios:8bf5ef5fa1ac9fab0891c1',
     messagingSenderId: '276185312340',
     projectId: 'trams-test-f2a06',
     storageBucket: 'trams-test-f2a06.firebasestorage.app',
-    iosBundleId: 'com.ai.trams',
+    iosBundleId: 'com.ai.trams.pushtest',
+  );
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyDD9BnQlqrmP9G2M1INh2LpjMkepcLrPRE',
+    appId: '1:276185312340:web:daf87489f663af660891c1',
+    messagingSenderId: '276185312340',
+    projectId: 'trams-test-f2a06',
+    authDomain: 'trams-test-f2a06.firebaseapp.com',
+    storageBucket: 'trams-test-f2a06.firebasestorage.app',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyD_W2OoFusUd8vOUPCo8pvSWEUM-wEYwl8',
+    appId: '1:276185312340:ios:9fbee614621ae1cf0891c1',
+    messagingSenderId: '276185312340',
+    projectId: 'trams-test-f2a06',
+    storageBucket: 'trams-test-f2a06.firebasestorage.app',
+    iosBundleId: 'com.ai.trams.macos',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyDD9BnQlqrmP9G2M1INh2LpjMkepcLrPRE',
+    appId: '1:276185312340:web:b1914736cb0ab66f0891c1',
+    messagingSenderId: '276185312340',
+    projectId: 'trams-test-f2a06',
+    authDomain: 'trams-test-f2a06.firebaseapp.com',
+    storageBucket: 'trams-test-f2a06.firebasestorage.app',
   );
 }
