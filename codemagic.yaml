@@ -1,0 +1,35 @@
+workflows:
+  ios-pushtest:
+    name: iOS push test
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    working_directory: trams-clone
+    integrations:
+      app_store_connect: codemagic
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ai.trams.pushtest
+    scripts:
+      - name: Set up keychain
+        script: keychain initialize
+      - name: Fetch signing files
+        script: app-store-connect fetch-signing-files "com.ai.trams.pushtest" --type IOS_APP_STORE --create
+      - name: Add certificates to keychain
+        script: keychain add-certificates
+      - name: Apply provisioning profile
+        script: xcode-project use-profiles
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build IPA
+        script: flutter build ipa --release --build-number=$BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - trams-clone/build/ios/ipa/*.ipa
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
