@@ -7,12 +7,11 @@ workflows:
     integrations:
       app_store_connect: codemagic
     environment:
+      groups:
+        - signing
       flutter: stable
       xcode: latest
       cocoapods: default
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.ai.trams.pushtest
     scripts:
       - name: Set up keychain
         script: keychain initialize
@@ -27,7 +26,6 @@ workflows:
       - name: Build IPA
         script: flutter build ipa --release --build-number=$BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
     artifacts:
-      - trams-clone/build/ios/ipa/*.ipa
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
