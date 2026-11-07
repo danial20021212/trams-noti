@@ -24,3 +24,11 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (to_username, is_read);
+
+CREATE TABLE IF NOT EXISTS app_users (
+  username       TEXT PRIMARY KEY,
+  user_type      TEXT,
+  user_package   TEXT,
+  last_login_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_app_users_type_package ON app_users (user_type, user_package);
