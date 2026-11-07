@@ -87,6 +87,17 @@ app.post('/devices', requireUser, async (req, res) => {
                      updated_at = now()`,
       [req.user.username, token, platform, userType, userPackage]
     );
+    // Remember the user itself. This row stays after logout, so notifications
+    // sent while they are logged out are still saved for them.
+    await pool.query(
+      `INSERT INTO app_users (username, user_type, user_package)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (username)
+       DO UPDATE SET user_type = COALESCE(EXCLUDED.user_type, app_users.user_type),
+                     user_package = COALESCE(EXCLUDED.user_package, app_users.user_package),
+                     last_login_at = now()`,
+      [req.user.username, userType, userPackage]
+    );
     console.log('Registered device for', req.user.username);
     res.json({ ok: true });
   } catch (err) {
@@ -243,15 +254,24 @@ async function notifyUsers({
   fromUsername, userType, userPackage, title, body,
   formType = null, action = null, recordId = null, meta = null,
 }) {
-  // 1. Find every phone logged in as this user type AND package.
-  const devices = await pool.query(
-    'SELECT username, fcm_token FROM device_tokens WHERE user_type = $1 AND user_package = $2',
+  // 1. Recipients = every known user of this type AND package, logged in or not.
+  //    (app_users is filled at login and is not cleared at logout.)
+  const people = await pool.query(
+    'SELECT username FROM app_users WHERE user_type = $1 AND user_package = $2',
     [userType, String(userPackage)]
   );
-  const tokens = devices.rows.map((r) => r.fcm_token);
-  const usernames = [...new Set(devices.rows.map((r) => r.username))];
+  const usernames = people.rows.map((r) => r.username);
 
-  // 2. Save one notification per recipient user.
+  // Phones to push to: only the ones currently logged in as those users.
+  const devices = usernames.length
+    ? await pool.query(
+        'SELECT fcm_token FROM device_tokens WHERE username = ANY($1)',
+        [usernames]
+      )
+    : { rows: [] };
+  const tokens = devices.rows.map((r) => r.fcm_token);
+
+  // 2. Save one notification per recipient user (also those with no phone logged in).
   for (const u of usernames) {
     await pool.query(
       `INSERT INTO notifications
