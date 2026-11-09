@@ -293,6 +293,12 @@ async function notifyUsers({
     });
     sent = result.successCount;
 
+    result.responses.forEach((r) => {
+      if (!r.success) {
+        console.log('FCM send failed:', r.error?.code, '-', r.error?.message);
+      }
+    });
+
     // 4. Clean up dead tokens.
     const dead = [];
     result.responses.forEach((r, i) => {
